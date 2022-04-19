@@ -35,6 +35,105 @@ dir_list = os.listdir(r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution
 files = [text.split(".")[0] for text in dir_list if (os.path.getsize(r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/Landmark Points (labeled videos)/" + text) != 0)]
 
 ##
+#def init_shuffle_dataset():
+training_rate, validation_rate, test_rate = 0.8, 0.1, 0.1
+np.random.shuffle(files)
+len_files = len(files)
+
+training_files = files[:int(len_files * training_rate)]
+validation_files = files[int(len_files * training_rate):int(len_files * (training_rate + validation_rate))]
+test_files = files[int(len_files * (training_rate + validation_rate)):]
+
+
+def dataset_generator(augment_number, file_list):
+	count = 0
+	while count < augment_number:
+		count += 1
+		yield count
+	for file in file_list:
+		# file = r"3f28a162-f529-4bc4-bbd6-f1ecf92d8b22"
+		# file = r"0005b896-33ad-4ecf-93b4-dad735ad69b6"
+		label_csv = pd.read_csv(r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/AU Labels/" + file + "-label.csv")
+		len_label = label_csv.shape[0]
+		label_idx = 0
+
+
+		landmarks = pd.read_csv(
+			r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/Landmark Points (labeled videos)/" + file + ".csv")
+		cap = cv2.VideoCapture(
+			r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/Videos - FLV (labeled)/" + file + ".flv")
+
+		frame_number = 0
+		while cap.isOpened():
+			frame_exists, image = cap.read()
+			if not frame_exists:
+				break
+			try:
+				left_eye = (int((np.float64(landmarks.pt_affdex_tracker_34[frame_number]) + np.float64(
+					landmarks.pt_affdex_tracker_32[frame_number]) +
+								 np.float64(landmarks.pt_affdex_tracker_60[frame_number]) + np.float64(
+							landmarks.pt_affdex_tracker_62[frame_number])) / 4),
+							int((np.float64(landmarks.pt_affdex_tracker_35[frame_number]) + np.float64(
+								landmarks.pt_affdex_tracker_33[frame_number]) +
+								 np.float64(landmarks.pt_affdex_tracker_61[frame_number]) + np.float64(
+										landmarks.pt_affdex_tracker_63[frame_number])) / 4))
+
+				right_eye = (int((np.float64(landmarks.pt_affdex_tracker_36[frame_number]) + np.float64(
+					landmarks.pt_affdex_tracker_64[frame_number]) +
+								  np.float64(landmarks.pt_affdex_tracker_38[frame_number]) + np.float64(
+							landmarks.pt_affdex_tracker_66[frame_number])) / 4),
+							 int((np.float64(landmarks.pt_affdex_tracker_37[frame_number]) + np.float64(
+								 landmarks.pt_affdex_tracker_65[frame_number]) +
+								  np.float64(landmarks.pt_affdex_tracker_39[frame_number]) + np.float64(
+										 landmarks.pt_affdex_tracker_67[frame_number])) / 4))
+
+				angle = angle_between((1, 0), (right_eye[0] - left_eye[0], right_eye[1] - left_eye[1])) * 180 / 3.141592
+				if left_eye[1] > right_eye[1]:
+					angle = -angle
+				distance = int(np.linalg.norm((right_eye[0] - left_eye[0], right_eye[1] - left_eye[1])))
+
+				rotate_matrix = cv2.getRotationMatrix2D(center=left_eye, angle=angle, scale=1)
+				rotated_image = cv2.warpAffine(src=image, M=rotate_matrix, dsize=(image.shape[1], image.shape[0]))
+
+				ratio = distance / 100
+				rectangle = ((int(left_eye[0] - 75 * ratio), int(left_eye[1] - 70 * ratio)),
+							 ((int(left_eye[0] + 175 * ratio), int(left_eye[1] + 180 * ratio))))
+
+				if (len_label > label_idx + 1 and label_csv.iloc[label_idx + 1, 0] * 1000 < landmarks.iloc[frame_number, 0]):  # TimeStamp(msec) csak nem jeleníti meg valamiért
+					label_idx = label_idx + 1
+
+				aug_count = 0
+				while aug_count < augment_number:
+					print(str(aug_count) + " " + str(augment_number))
+
+					# delta_x = random(1)
+					# T = np.float32([[1, delta_x, delta_x * left_eye[1]], [0, 1, 0]])
+					# img_translation = cv2.warpAffine(image, T, (image.shape))
+
+
+					cropped_image = rotated_image[rectangle[0][1]:rectangle[1][1], rectangle[0][0]:rectangle[1][0]]
+					downsampled_image = cv2.resize(cropped_image, (64, 64))
+
+
+
+
+					if (np.float64(label_csv.iloc[label_idx, 1]) == 0):
+						label = 0
+					else:
+						label = 1
+
+					yield downsampled_image / 255
+					aug_count += 1
+					print("a")
+
+			except:
+				pass
+
+			frame_number = frame_number + 1
+
+		count = count + 1
+
+##
 
 training_rate, validation_rate, test_rate = 0.8, 0.1, 0.1
 np.random.shuffle(files)
