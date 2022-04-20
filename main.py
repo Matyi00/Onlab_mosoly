@@ -35,7 +35,7 @@ dir_list = os.listdir(r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution
 files = [text.split(".")[0] for text in dir_list if (os.path.getsize(r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/Landmark Points (labeled videos)/" + text) != 0)]
 
 ##
-#def init_shuffle_dataset():
+
 training_rate, validation_rate, test_rate = 0.8, 0.1, 0.1
 np.random.shuffle(files)
 len_files = len(files)
@@ -44,12 +44,8 @@ training_files = files[:int(len_files * training_rate)]
 validation_files = files[int(len_files * training_rate):int(len_files * (training_rate + validation_rate))]
 test_files = files[int(len_files * (training_rate + validation_rate)):]
 
-
 def dataset_generator(augment_number, file_list):
 	count = 0
-	while count < augment_number:
-		count += 1
-		yield count
 	for file in file_list:
 		# file = r"3f28a162-f529-4bc4-bbd6-f1ecf92d8b22"
 		# file = r"0005b896-33ad-4ecf-93b4-dad735ad69b6"
@@ -104,14 +100,19 @@ def dataset_generator(augment_number, file_list):
 
 				aug_count = 0
 				while aug_count < augment_number:
-					print(str(aug_count) + " " + str(augment_number))
-
-					# delta_x = random(1)
-					# T = np.float32([[1, delta_x, delta_x * left_eye[1]], [0, 1, 0]])
-					# img_translation = cv2.warpAffine(image, T, (image.shape))
+					#print(str(aug_count) + " " + str(augment_number))
 
 
-					cropped_image = rotated_image[rectangle[0][1]:rectangle[1][1], rectangle[0][0]:rectangle[1][0]]
+					height, width = image.shape[:2]
+					if (aug_count == 0):
+						delta_x = 0
+					else:
+						delta_x = (np.random.rand() - 0.5) / 2
+					T = np.float32([[1, delta_x, -delta_x * left_eye[1]], [0, 1, 0]])
+					img_translation = cv2.warpAffine(rotated_image, T, (width, height))
+
+
+					cropped_image = img_translation[rectangle[0][1]:rectangle[1][1], rectangle[0][0]:rectangle[1][0]]
 					downsampled_image = cv2.resize(cropped_image, (64, 64))
 
 
@@ -121,18 +122,25 @@ def dataset_generator(augment_number, file_list):
 						label = 0
 					else:
 						label = 1
-
-					yield downsampled_image / 255
+					if (np.random.rand() > 0.5):
+						downsampled_image = cv2.flip(downsampled_image, 1)
+					yield (downsampled_image / 255, label)
 					aug_count += 1
-					print("a")
 
-			except:
-				pass
+
+			except Exception as e:
+				print(f"{type(e).__name__} at line {e.__traceback__.tb_lineno} of {__file__}: {e}")
 
 			frame_number = frame_number + 1
 
 		count = count + 1
+##
+class proxy:
+	def __init__(self, aug, list):
+		self.gen = dataset_generator(aug, list)
 
+	def __call__(self):
+		return next(self.gen)
 ##
 
 training_rate, validation_rate, test_rate = 0.8, 0.1, 0.1
@@ -294,9 +302,17 @@ model.compile(optimizer='adam',
               loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
               metrics=['accuracy'])
 
-history = model.fit(training_images, training_labels, epochs=10,
-                    validation_data=(validation_images, validation_labels), callbacks=[callback])
+# history = model.fit(training_images, training_labels, epochs=10,
+#                     validation_data=(validation_images, validation_labels), callbacks=[callback])
 
+
+tr_generator = tf.data.Dataset.from_generator(
+		generator=proxy(10,training_files),
+		output_types=(np.ndarray,int),
+		output_shapes=((64,64,3), 1))
+
+history = model.fit(x=tr_generator, epochs=10,
+                     validation_data=tf.data.Dataset.from_generator(dataset_generator(1, validation_files)), callbacks=[callback])
 
 ##
 pred = model(test_images[:10000])
