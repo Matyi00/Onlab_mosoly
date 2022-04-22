@@ -1,8 +1,13 @@
+# pkill -KILL -u polyamatyas
 ##
 import numpy as np
 import imutils
 import cv2
 import tensorflow as tf
+#tf.config.gpu.set_per_process_memory_growth(True)
+
+physical_devices = tf.config.experimental.list_physical_devices('GPU')
+tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 from tensorflow.keras import datasets, layers, models
 import matplotlib.pyplot as plt
@@ -129,18 +134,29 @@ def dataset_generator(augment_number, file_list):
 
 
 			except Exception as e:
-				print(f"{type(e).__name__} at line {e.__traceback__.tb_lineno} of {__file__}: {e}")
+				pass
+				#print(f"{type(e).__name__} at line {e.__traceback__.tb_lineno} of {__file__}: {e}")
 
 			frame_number = frame_number + 1
 
 		count = count + 1
 ##
-class proxy:
-	def __init__(self, aug, list):
-		self.gen = dataset_generator(aug, list)
+# class proxy:
+# 	def __init__(self, aug, list):
+# 		self.aug = aug
+# 		self.list = list
+# 		self.gen = dataset_generator(self.aug, self.list)
+#
+# 	def __call__(self):
+# 		return next(self.gen)
+#
+# 	def __iter__(self):
+# 		self.gen = dataset_generator(self.aug, self.list)
+# 		return self
+#
+# 	def __next__(self):
+# 		return next(self.gen)
 
-	def __call__(self):
-		return next(self.gen)
 ##
 
 training_rate, validation_rate, test_rate = 0.8, 0.1, 0.1
@@ -302,17 +318,26 @@ model.compile(optimizer='adam',
               loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
               metrics=['accuracy'])
 
-# history = model.fit(training_images, training_labels, epochs=10,
-#                     validation_data=(validation_images, validation_labels), callbacks=[callback])
+raw_train_generator = lambda: dataset_generator(10,training_files)
+raw_val_generator = lambda: dataset_generator(1,validation_files)
+
+tr_generator = tf.data.Dataset.from_generator(raw_train_generator, (tf.float64, tf.int32),    (tf.TensorShape([64,64,3]), tf.TensorShape([])))
+val_generator = tf.data.Dataset.from_generator(raw_val_generator,  (tf.float64, tf.int32),    (tf.TensorShape([64,64,3]), tf.TensorShape([])))
+
+# tr_generator = tf.data.Dataset.from_generator(proxy(10,training_files),  (tf.float64, tf.int32),    (tf.TensorShape([64,64,3]), tf.TensorShape([])))
+# val_generator = tf.data.Dataset.from_generator(proxy(10,validation_files),   (tf.float64, tf.int32),    (tf.TensorShape([64,64,3]), tf.TensorShape([])))
 
 
-tr_generator = tf.data.Dataset.from_generator(
-		generator=proxy(10,training_files),
-		output_types=(np.ndarray,int),
-		output_shapes=((64,64,3), 1))
 
-history = model.fit(x=tr_generator, epochs=10,
-                     validation_data=tf.data.Dataset.from_generator(dataset_generator(1, validation_files)), callbacks=[callback])
+# tr_generator = tf.data.Dataset.from_generator(proxy(10,training_files),	(tf.float64, tf.int32),	(tf.TensorShape([64,64,3]), tf.TensorShape([])))
+#
+# val_generator = tf.data.Dataset.from_generator(proxy(10,validation_files),	(tf.float64, tf.int32),	(tf.TensorShape([64,64,3]), tf.TensorShape([])))
+
+
+
+
+history = model.fit(x=tr_generator.batch(10000), epochs=10,
+                     validation_data=val_generator.batch(1000), callbacks=[callback])
 
 ##
 pred = model(test_images[:10000])
@@ -346,3 +371,5 @@ window_name = 'image'
 # Using cv2.imshow() method
 # Displaying the image
 cv2.imshow(window_name, image)
+
+
