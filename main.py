@@ -118,7 +118,7 @@ def dataset_generator(augment_number, file_list):
 
 
 					cropped_image = img_translation[rectangle[0][1]:rectangle[1][1], rectangle[0][0]:rectangle[1][0]]
-					downsampled_image = cv2.resize(cropped_image, (64, 64))
+					downsampled_image = cv2.resize(cropped_image, (128, 128))
 
 
 
@@ -288,10 +288,10 @@ flipped = 0
 
 ##
 model = models.Sequential()
-model.add(layers.Conv2D(64, (7, 7), activation='relu', input_shape=(64, 64, 3)))
+model.add(layers.Conv2D(64, (7, 7), activation='relu', input_shape=(128, 128, 3)))
 model.add(layers.Dropout(0.3))
 model.add(layers.MaxPooling2D((2, 2)))
-model.add(layers.Conv2D(64, (3, 3), activation='relu'))
+model.add(layers.Conv2D(64, (5, 5), activation='relu'))
 model.add(layers.Dropout(0.3))
 model.add(layers.MaxPooling2D((2, 2)))
 model.add(layers.Conv2D(64, (3, 3), activation='relu'))
@@ -318,11 +318,11 @@ model.compile(optimizer='adam',
               loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
               metrics=['accuracy'])
 
-raw_train_generator = lambda: dataset_generator(10,training_files)
+raw_train_generator = lambda: dataset_generator(4,training_files)
 raw_val_generator = lambda: dataset_generator(1,validation_files)
 
-tr_generator = tf.data.Dataset.from_generator(raw_train_generator, (tf.float64, tf.int32),    (tf.TensorShape([64,64,3]), tf.TensorShape([])))
-val_generator = tf.data.Dataset.from_generator(raw_val_generator,  (tf.float64, tf.int32),    (tf.TensorShape([64,64,3]), tf.TensorShape([])))
+tr_generator = tf.data.Dataset.from_generator(raw_train_generator, (tf.float64, tf.int32),    (tf.TensorShape([128,128,3]), tf.TensorShape([])))
+val_generator = tf.data.Dataset.from_generator(raw_val_generator,  (tf.float64, tf.int32),    (tf.TensorShape([128,128,3]), tf.TensorShape([])))
 
 # tr_generator = tf.data.Dataset.from_generator(proxy(10,training_files),  (tf.float64, tf.int32),    (tf.TensorShape([64,64,3]), tf.TensorShape([])))
 # val_generator = tf.data.Dataset.from_generator(proxy(10,validation_files),   (tf.float64, tf.int32),    (tf.TensorShape([64,64,3]), tf.TensorShape([])))
@@ -336,8 +336,10 @@ val_generator = tf.data.Dataset.from_generator(raw_val_generator,  (tf.float64, 
 
 
 
-history = model.fit(x=tr_generator.batch(10000), epochs=10,
-                     validation_data=val_generator.batch(1000), callbacks=[callback])
+history = model.fit_generator(tr_generator.batch(100), epochs=10,
+                    validation_data=val_generator.batch(100),
+					callbacks=[callback],
+					use_multiprocessing=True)
 
 ##
 pred = model(test_images[:10000])
