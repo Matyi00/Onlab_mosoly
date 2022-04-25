@@ -39,6 +39,13 @@ def angle_between(v1, v2):
 dir_list = os.listdir(r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/Landmark Points (labeled videos)")
 files = [text.split(".")[0] for text in dir_list if (os.path.getsize(r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/Landmark Points (labeled videos)/" + text) != 0)]
 
+
+
+##
+file = open(r'/home/polyamatyas/projects/mosoly/negative_positive_ratio.pkl', 'rb')
+file_negative_positive = pickle.load(file)
+file.close()
+
 ##
 
 training_rate, validation_rate, test_rate = 0.8, 0.1, 0.1
@@ -49,6 +56,18 @@ training_files = files[:int(len_files * training_rate)]
 validation_files = files[int(len_files * training_rate):int(len_files * (training_rate + validation_rate))]
 test_files = files[int(len_files * (training_rate + validation_rate)):]
 
+number_neg_pos = [0, 0]
+
+for file in training_files:
+	number_neg_pos[0] += file_negative_positive[file][0]
+	number_neg_pos[1] += file_negative_positive[file][1]
+
+weight_for_0 = (1 / number_neg_pos[0]) * ((number_neg_pos[0] + number_neg_pos[1]) / 2.0)
+weight_for_1 = (1 / number_neg_pos[1]) * ((number_neg_pos[0] + number_neg_pos[1]) / 2.0)
+
+class_weight = {0: weight_for_0, 1: weight_for_1}
+
+##
 def dataset_generator(augment_number, file_list):
 	count = 0
 	for file in file_list:
@@ -118,7 +137,7 @@ def dataset_generator(augment_number, file_list):
 
 
 					cropped_image = img_translation[rectangle[0][1]:rectangle[1][1], rectangle[0][0]:rectangle[1][0]]
-					downsampled_image = cv2.resize(cropped_image, (128, 128))
+					downsampled_image = cv2.resize(cropped_image, (64, 64))
 
 
 
@@ -159,136 +178,158 @@ def dataset_generator(augment_number, file_list):
 
 ##
 
-training_rate, validation_rate, test_rate = 0.8, 0.1, 0.1
-np.random.shuffle(files)
-len_files = len(files)
+# file_negative_positive = dict()
+# count = 0
+# for file in files:
+#
+# 	#file = r"3f28a162-f529-4bc4-bbd6-f1ecf92d8b22"
+# 	#file = r"0005b896-33ad-4ecf-93b4-dad735ad69b6"
+# 	label_csv = pd.read_csv(r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/AU Labels/" + file + "-label.csv")
+# 	len_label = label_csv.shape[0]
+# 	label_idx = 0
+#
+# 	landmarks = pd.read_csv(r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/Landmark Points (labeled videos)/" + file + ".csv")
+# 	cap = cv2.VideoCapture(r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/Videos - FLV (labeled)/" + file + ".flv")
+#
+# 	number_of_positives = 0
+# 	number_of_negatives = 0
+#
+# 	frame_number = 0
+# 	while cap.isOpened():
+# 		frame_exists, image = cap.read()
+# 		if not frame_exists:
+# 			break
+# 		try:
+#
+# 			if (len_label > label_idx + 1 and label_csv.iloc[label_idx + 1,0] * 1000 < landmarks.iloc[frame_number, 0]): #TimeStamp(msec) csak nem jeleníti meg valamiért
+# 				label_idx = label_idx + 1
+#
+#
+# 			if (np.float64(label_csv.iloc[label_idx, 1]) == 0):
+# 				number_of_negatives += 1
+# 			else:
+# 				number_of_positives += 1
+#
+# 		except:
+# 			pass
+#
+#
+#
+# 		frame_number = frame_number + 1
+#
+# 	file_negative_positive[file] = (number_of_negatives, number_of_positives)
+#
+# 	count = count + 1
+# 	print(str(count) + "/" + str(len(files)))
+# 	# if count == 2:
+# 	# 	break
+#
+# file = open(r'/home/polyamatyas/projects/mosoly/negative_positive_ratio.pkl', 'wb')
+# pickle.dump(file_negative_positive, file)
+# file.close()
+#
 
-
-training_images = []
-training_labels = []
-
-validation_images = []
-validation_labels = []
-
-test_images = []
-test_labels = []
-
-count = 0
-for file in files:
-	#file = r"3f28a162-f529-4bc4-bbd6-f1ecf92d8b22"
-	#file = r"0005b896-33ad-4ecf-93b4-dad735ad69b6"
-	label_csv = pd.read_csv(r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/AU Labels/" + file + "-label.csv")
-	len_label = label_csv.shape[0]
-	label_idx = 0
-
-	landmarks = pd.read_csv(r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/Landmark Points (labeled videos)/" + file + ".csv")
-	cap = cv2.VideoCapture(r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/Videos - FLV (labeled)/" + file + ".flv")
-
-	frame_number = 0
-	while cap.isOpened():
-		frame_exists, image = cap.read()
-		if not frame_exists:
-			break
-		try:
-			left_eye = (int((np.float64 (landmarks.pt_affdex_tracker_34[frame_number]) + np.float64 (landmarks.pt_affdex_tracker_32[frame_number]) +
-							 np.float64 (landmarks.pt_affdex_tracker_60[frame_number]) + np.float64 (landmarks.pt_affdex_tracker_62[frame_number])) / 4),
-						int((np.float64 (landmarks.pt_affdex_tracker_35[frame_number]) + np.float64 (landmarks.pt_affdex_tracker_33[frame_number]) +
-							 np.float64 (landmarks.pt_affdex_tracker_61[frame_number]) + np.float64 (landmarks.pt_affdex_tracker_63[frame_number])) / 4))
-
-			right_eye = (int((np.float64 (landmarks.pt_affdex_tracker_36[frame_number]) + np.float64 (landmarks.pt_affdex_tracker_64[frame_number]) +
-							  np.float64 (landmarks.pt_affdex_tracker_38[frame_number]) + np.float64 (landmarks.pt_affdex_tracker_66[frame_number])) / 4),
-						 int((np.float64 (landmarks.pt_affdex_tracker_37[frame_number]) + np.float64 (landmarks.pt_affdex_tracker_65[frame_number]) +
-							  np.float64 (landmarks.pt_affdex_tracker_39[frame_number]) + np.float64 (landmarks.pt_affdex_tracker_67[frame_number])) / 4))
-
-			angle = angle_between((1, 0), (right_eye[0] - left_eye[0], right_eye[1] - left_eye[1])) * 180 / 3.141592
-			if left_eye[1] > right_eye[1]:
-				angle = -angle
-			distance = int(np.linalg.norm((right_eye[0] - left_eye[0], right_eye[1] - left_eye[1])))
-
-			rotate_matrix = cv2.getRotationMatrix2D(center=left_eye, angle=angle, scale=1)
-			rotated_image = cv2.warpAffine(src=image, M=rotate_matrix, dsize=(image.shape[1], image.shape[0]))
-
-			ratio = distance / 100
-			rectangle = ((int(left_eye[0] - 75 * ratio), int(left_eye[1] - 70 * ratio)),
-						 ((int(left_eye[0] + 175 * ratio), int(left_eye[1] + 180 * ratio))))
-
-			cropped_image = rotated_image[rectangle[0][1]:rectangle[1][1], rectangle[0][0]:rectangle[1][0]]
-			downsampled_image = cv2.resize(cropped_image, (64, 64))
-
-
-
-			if (len_label > label_idx + 1 and label_csv.iloc[label_idx + 1,0] * 1000 < landmarks.iloc[frame_number, 0]): #TimeStamp(msec) csak nem jeleníti meg valamiért
-				label_idx = label_idx + 1
-
-			if (count / len_files < training_rate):
-				if (np.float64(label_csv.iloc[label_idx, 1]) == 0):
-					training_labels.append(0)
-				else:
-					training_labels.append(1)
-				training_images.append(downsampled_image / 255)
-			elif (count / len_files < training_rate + validation_rate):
-				if (np.float64(label_csv.iloc[label_idx, 1]) == 0):
-					validation_labels.append(0)
-				else:
-					validation_labels.append(1)
-				validation_images.append(downsampled_image / 255)
-			else:
-				if (np.float64(label_csv.iloc[label_idx, 1]) == 0):
-					test_labels.append(0)
-				else:
-					test_labels.append(1)
-				test_images.append(downsampled_image / 255)
-
-
-		except:
-			pass
-
-
-
-		frame_number = frame_number + 1
-
-
-
-	count = count + 1
-	print(str(count) + "/" + str(len(files)))
-	# if count == 2:
-	# 	break
-
-training_images, training_labels = np.array(training_images), np.array(training_labels)
-validation_images, validation_labels = np.array(validation_images), np.array(validation_labels)
-test_images, test_labels = np.array(test_images), np.array(test_labels)
-
-file = open(r'/home/polyamatyas/projects/mosoly/data.pkl', 'wb')
-pickle.dump(training_images, file, protocol=4)
-pickle.dump(training_labels, file, protocol=4)
-pickle.dump(validation_images, file, protocol=4)
-pickle.dump(validation_labels, file, protocol=4)
-pickle.dump(test_images, file, protocol=4)
-pickle.dump(test_labels, file, protocol=4)
-file.close()
 
 ##
-file = open(r'/home/polyamatyas/projects/mosoly/data.pkl', 'rb')
-training_images = pickle.load(file)
-training_labels = pickle.load(file)
-validation_images = pickle.load(file)
-validation_labels = pickle.load(file)
-test_images = pickle.load(file)
-test_labels = pickle.load(file)
-file.close()
+
+# file_inputs = dict()
+#
+# count = 0
+# for file in files:
+#
+# 	#file = r"3f28a162-f529-4bc4-bbd6-f1ecf92d8b22"
+# 	#file = r"0005b896-33ad-4ecf-93b4-dad735ad69b6"
+# 	label_csv = pd.read_csv(r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/AU Labels/" + file + "-label.csv")
+# 	len_label = label_csv.shape[0]
+# 	label_idx = 0
+#
+# 	input_images = []
+# 	input_labels = []
+#
+# 	landmarks = pd.read_csv(r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/Landmark Points (labeled videos)/" + file + ".csv")
+# 	cap = cv2.VideoCapture(r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/Videos - FLV (labeled)/" + file + ".flv")
+#
+# 	frame_number = 0
+# 	while cap.isOpened():
+# 		frame_exists, image = cap.read()
+# 		if not frame_exists:
+# 			break
+# 		try:
+# 			left_eye = (int((np.float64 (landmarks.pt_affdex_tracker_34[frame_number]) + np.float64 (landmarks.pt_affdex_tracker_32[frame_number]) +
+# 							 np.float64 (landmarks.pt_affdex_tracker_60[frame_number]) + np.float64 (landmarks.pt_affdex_tracker_62[frame_number])) / 4),
+# 						int((np.float64 (landmarks.pt_affdex_tracker_35[frame_number]) + np.float64 (landmarks.pt_affdex_tracker_33[frame_number]) +
+# 							 np.float64 (landmarks.pt_affdex_tracker_61[frame_number]) + np.float64 (landmarks.pt_affdex_tracker_63[frame_number])) / 4))
+#
+# 			right_eye = (int((np.float64 (landmarks.pt_affdex_tracker_36[frame_number]) + np.float64 (landmarks.pt_affdex_tracker_64[frame_number]) +
+# 							  np.float64 (landmarks.pt_affdex_tracker_38[frame_number]) + np.float64 (landmarks.pt_affdex_tracker_66[frame_number])) / 4),
+# 						 int((np.float64 (landmarks.pt_affdex_tracker_37[frame_number]) + np.float64 (landmarks.pt_affdex_tracker_65[frame_number]) +
+# 							  np.float64 (landmarks.pt_affdex_tracker_39[frame_number]) + np.float64 (landmarks.pt_affdex_tracker_67[frame_number])) / 4))
+#
+# 			angle = angle_between((1, 0), (right_eye[0] - left_eye[0], right_eye[1] - left_eye[1])) * 180 / 3.141592
+# 			if left_eye[1] > right_eye[1]:
+# 				angle = -angle
+# 			distance = int(np.linalg.norm((right_eye[0] - left_eye[0], right_eye[1] - left_eye[1])))
+#
+# 			rotate_matrix = cv2.getRotationMatrix2D(center=left_eye, angle=angle, scale=1)
+# 			rotated_image = cv2.warpAffine(src=image, M=rotate_matrix, dsize=(image.shape[1], image.shape[0]))
+#
+# 			ratio = distance / 100
+# 			rectangle = ((int(left_eye[0] - 75 * ratio), int(left_eye[1] - 70 * ratio)),
+# 						 ((int(left_eye[0] + 175 * ratio), int(left_eye[1] + 180 * ratio))))
+#
+# 			cropped_image = rotated_image[rectangle[0][1]:rectangle[1][1], rectangle[0][0]:rectangle[1][0]]
+# 			downsampled_image = cv2.resize(cropped_image, (64, 64))
+#
+#
+#
+# 			if (len_label > label_idx + 1 and label_csv.iloc[label_idx + 1,0] * 1000 < landmarks.iloc[frame_number, 0]): #TimeStamp(msec) csak nem jeleníti meg valamiért
+# 				label_idx = label_idx + 1
+#
+# 			if (np.float64(label_csv.iloc[label_idx, 1]) == 0):
+# 				input_labels.append(0)
+# 			else:
+# 				input_labels.append(1)
+# 			input_images.append(downsampled_image / 255)
+#
+#
+# 		except Exception as e:
+# 			#print(f"{type(e).__name__} at line {e.__traceback__.tb_lineno} of {__file__}: {e}")
+# 			pass
+#
+#
+#
+# 		frame_number = frame_number + 1
+#
+# 	file_inputs[file] = (np.array(input_images), np.array(input_labels))
+#
+# 	count = count + 1
+# 	print(str(count) + "/" + str(len(files)))
+# 	# if count == 2:
+# 	# 	break
+#
+#
+#
+# file = open(r'/home/polyamatyas/projects/mosoly/data.pkl', 'wb')
+# pickle.dump(file_inputs, file, protocol=4)
+# file.close()
 
 ##
-flipped = training_images
+# file = open(r'/home/polyamatyas/projects/mosoly/data.pkl', 'rb')
+# file_inputs = pickle.load(file)
+# file.close()
 
-for x in flipped:
-	x = cv2.flip(x,1)
-training_images = np.concatenate((training_images, flipped))
-training_labels = np.append(training_labels, training_labels)
-flipped = 0
+##
+# flipped = training_images
+#
+# for x in flipped:
+# 	x = cv2.flip(x,1)
+# training_images = np.concatenate((training_images, flipped))
+# training_labels = np.append(training_labels, training_labels)
+# flipped = 0
 
 ##
 model = models.Sequential()
-model.add(layers.Conv2D(64, (7, 7), activation='relu', input_shape=(128, 128, 3)))
+model.add(layers.Conv2D(64, (7, 7), activation='relu', input_shape=(64, 64, 3)))
 model.add(layers.Dropout(0.3))
 model.add(layers.MaxPooling2D((2, 2)))
 model.add(layers.Conv2D(64, (5, 5), activation='relu'))
@@ -321,8 +362,8 @@ model.compile(optimizer='adam',
 raw_train_generator = lambda: dataset_generator(4,training_files)
 raw_val_generator = lambda: dataset_generator(1,validation_files)
 
-tr_generator = tf.data.Dataset.from_generator(raw_train_generator, (tf.float64, tf.int32),    (tf.TensorShape([128,128,3]), tf.TensorShape([])))
-val_generator = tf.data.Dataset.from_generator(raw_val_generator,  (tf.float64, tf.int32),    (tf.TensorShape([128,128,3]), tf.TensorShape([])))
+tr_generator = tf.data.Dataset.from_generator(raw_train_generator, (tf.float64, tf.int32),    (tf.TensorShape([64,64,3]), tf.TensorShape([])))
+val_generator = tf.data.Dataset.from_generator(raw_val_generator,  (tf.float64, tf.int32),    (tf.TensorShape([64,64,3]), tf.TensorShape([])))
 
 # tr_generator = tf.data.Dataset.from_generator(proxy(10,training_files),  (tf.float64, tf.int32),    (tf.TensorShape([64,64,3]), tf.TensorShape([])))
 # val_generator = tf.data.Dataset.from_generator(proxy(10,validation_files),   (tf.float64, tf.int32),    (tf.TensorShape([64,64,3]), tf.TensorShape([])))
@@ -336,42 +377,46 @@ val_generator = tf.data.Dataset.from_generator(raw_val_generator,  (tf.float64, 
 
 
 
-history = model.fit_generator(tr_generator.batch(100), epochs=10,
-                    validation_data=val_generator.batch(100),
+history = model.fit_generator(tr_generator.batch(1000), epochs=10,
+                    validation_data=val_generator.batch(1000),
 					callbacks=[callback],
-					use_multiprocessing=True)
+					use_multiprocessing=True,
+					class_weight=class_weight)
+
+
+
+file = open(r'/home/polyamatyas/projects/mosoly/trained_model.pkl', 'wb')
+pickle.dump(model, file)
+pickle.dump(history, file)
+file.close()
 
 ##
-pred = model(test_images[:10000])
-pred = np.argmax(pred, axis = 1)
-
-wrong_pred = []
-for i in range(len(pred)):
-	if pred[i] != test_labels[i]:
-		wrong_pred.append(test_images[i]*255)
-		print("predicted: " + str(pred[i]) + " Real value: " + str(test_labels[i]) + " Index: " + str(i))
-
-
+# pred = model(test_images[:10000])
+# pred = np.argmax(pred, axis = 1)
+#
+# wrong_pred = []
+# for i in range(len(pred)):
+# 	if pred[i] != test_labels[i]:
+# 		wrong_pred.append(test_images[i]*255)
+# 		print("predicted: " + str(pred[i]) + " Real value: " + str(test_labels[i]) + " Index: " + str(i))
+#
+#
 
 ##
-cnt = [0,0]
-for x in training_labels:
-	cnt[x] += 1
+# cnt = [0,0]
+# for x in training_labels:
+# 	cnt[x] += 1
 ##
-import cv2
-import os
-os.environ['DISPLAY'] = 'localhost:10.0'
+# import cv2
+# import os
+# os.environ['DISPLAY'] = 'localhost:10.0'
+#
+# path = r'/home/polyamatyas/projects/mosoly/breakfast.png'
 
-path = r'/home/polyamatyas/projects/mosoly/breakfast.png'
+# image = cv2.imread(path)
 
-# Reading an image in default mode
-image = cv2.imread(path)
+# window_name = 'image'
 
-# Window name in which image is displayed
-window_name = 'image'
-
-# Using cv2.imshow() method
-# Displaying the image
-cv2.imshow(window_name, image)
+# cv2.imshow(window_name, image)
 
 
