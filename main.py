@@ -1,10 +1,10 @@
 # pkill -KILL -u polyamatyas
+# watch -n 0 nvidia-smi
 ##
 import numpy as np
 import imutils
 import cv2
 import tensorflow as tf
-#tf.config.gpu.set_per_process_memory_growth(True)
 
 physical_devices = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(physical_devices[0], True)
@@ -36,6 +36,7 @@ def angle_between(v1, v2):
 	return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
 
 ##
+
 dir_list = os.listdir(r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/Landmark Points (labeled videos)")
 files = [text.split(".")[0] for text in dir_list if (os.path.getsize(r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/Landmark Points (labeled videos)/" + text) != 0)]
 
@@ -231,7 +232,7 @@ def dataset_generator(augment_number, file_list):
 
 
 ##
-
+#
 # file_inputs = dict()
 #
 # count = 0
@@ -300,7 +301,7 @@ def dataset_generator(augment_number, file_list):
 #
 # 		frame_number = frame_number + 1
 #
-# 	file_inputs[file] = (np.array(input_images), np.array(input_labels))
+# 	file_inputs[file] = (input_images, input_labels)
 #
 # 	count = count + 1
 # 	print(str(count) + "/" + str(len(files)))
@@ -314,18 +315,49 @@ def dataset_generator(augment_number, file_list):
 # file.close()
 
 ##
-# file = open(r'/home/polyamatyas/projects/mosoly/data.pkl', 'rb')
-# file_inputs = pickle.load(file)
-# file.close()
+def load_inputs_from_file():
+	global training_images
+	global training_labels
+	global validation_images
+	global validation_labels
+	global test_images
+	global test_labels
 
-##
-# flipped = training_images
-#
-# for x in flipped:
-# 	x = cv2.flip(x,1)
-# training_images = np.concatenate((training_images, flipped))
-# training_labels = np.append(training_labels, training_labels)
-# flipped = 0
+	file = open(r'/home/polyamatyas/projects/mosoly/data.pkl', 'rb')
+	file_inputs = pickle.load(file)
+	file.close()
+
+	training_images = []
+	training_labels = []
+
+	test_images = []
+	test_labels = []
+
+	validation_images = []
+	validation_labels = []
+	for file in training_files:
+		training_images.extend(file_inputs[file][0])
+		training_labels.extend(file_inputs[file][1])
+
+
+	for file in test_files:
+		test_images.extend(file_inputs[file][0])
+		test_labels.extend(file_inputs[file][1])
+
+
+	for file in validation_files:
+		validation_images.extend(file_inputs[file][0])
+		validation_labels.extend(file_inputs[file][1])
+
+	file_inputs = 0
+
+
+
+	training_images, training_labels = np.array(training_images), np.array(training_labels)
+	validation_images, validation_labels = np.array(validation_images), np.array(validation_labels)
+	test_images, test_labels = np.array(test_images), np.array(test_labels)
+
+
 
 ##
 model = models.Sequential()
@@ -344,7 +376,7 @@ model.add(layers.Dense(50))
 model.summary()
 
 ##
-callback = tf.keras.callbacks.EarlyStopping(
+early_stopping_callback = tf.keras.callbacks.EarlyStopping(
     monitor="val_loss",
     min_delta=0,
     patience=10,
@@ -353,6 +385,15 @@ callback = tf.keras.callbacks.EarlyStopping(
     baseline=None,
     restore_best_weights=True
 )
+
+
+checkpoint_filepath = r'/home/polyamatyas/projects/mosoly/models/checkpoint_{epoch:02d}.hdf5'
+model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+    filepath=checkpoint_filepath,
+    save_weights_only=False,
+    monitor='val_accuracy',
+    save_best_only=False)
+
 
 
 model.compile(optimizer='adam',
@@ -365,58 +406,41 @@ raw_val_generator = lambda: dataset_generator(1,validation_files)
 tr_generator = tf.data.Dataset.from_generator(raw_train_generator, (tf.float64, tf.int32),    (tf.TensorShape([64,64,3]), tf.TensorShape([])))
 val_generator = tf.data.Dataset.from_generator(raw_val_generator,  (tf.float64, tf.int32),    (tf.TensorShape([64,64,3]), tf.TensorShape([])))
 
-# tr_generator = tf.data.Dataset.from_generator(proxy(10,training_files),  (tf.float64, tf.int32),    (tf.TensorShape([64,64,3]), tf.TensorShape([])))
-# val_generator = tf.data.Dataset.from_generator(proxy(10,validation_files),   (tf.float64, tf.int32),    (tf.TensorShape([64,64,3]), tf.TensorShape([])))
-
-
-
-# tr_generator = tf.data.Dataset.from_generator(proxy(10,training_files),	(tf.float64, tf.int32),	(tf.TensorShape([64,64,3]), tf.TensorShape([])))
-#
-# val_generator = tf.data.Dataset.from_generator(proxy(10,validation_files),	(tf.float64, tf.int32),	(tf.TensorShape([64,64,3]), tf.TensorShape([])))
-
-
-
-
-history = model.fit_generator(tr_generator.batch(1000), epochs=10,
-                    validation_data=val_generator.batch(1000),
-					callbacks=[callback],
+history = model.fit_generator(tr_generator.batch(1), epochs=20,
+                    validation_data=val_generator.batch(1),
+					callbacks=[early_stopping_callback, model_checkpoint_callback],
 					use_multiprocessing=True,
 					class_weight=class_weight)
 
 
+# load_inputs_from_file()
+# history = model.fit(training_images,
+# 					training_labels,
+# 					epochs=20,
+#                     validation_data=(validation_images, validation_labels),
+# 					callbacks=[early_stopping_callback, model_checkpoint_callback],
+# 					class_weight=class_weight)
 
-file = open(r'/home/polyamatyas/projects/mosoly/trained_model.pkl', 'wb')
-pickle.dump(model, file)
-pickle.dump(history, file)
-file.close()
+
+
+
 
 ##
-# pred = model(test_images[:10000])
+
+
+# path = r'/home/polyamatyas/projects/mosoly/models/checkpoint_15.hdf5'
+# savedModel = models.load_model(path)
+# pred = savedModel(test_images[:1000])
 # pred = np.argmax(pred, axis = 1)
 #
 # wrong_pred = []
 # for i in range(len(pred)):
-# 	if pred[i] != test_labels[i]:
-# 		wrong_pred.append(test_images[i]*255)
-# 		print("predicted: " + str(pred[i]) + " Real value: " + str(test_labels[i]) + " Index: " + str(i))
+# 	#if pred[i] != test_labels[i]:
+# 	#	wrong_pred.append(test_images[i]*255)
+# 	print("predicted: " + str(pred[i]) + " Real value: " + str(test_labels[i]) + " Index: " + str(i))
 #
 #
-
-##
-# cnt = [0,0]
-# for x in training_labels:
-# 	cnt[x] += 1
-##
-# import cv2
-# import os
-# os.environ['DISPLAY'] = 'localhost:10.0'
-#
-# path = r'/home/polyamatyas/projects/mosoly/breakfast.png'
-
-# image = cv2.imread(path)
-
-# window_name = 'image'
-
-# cv2.imshow(window_name, image)
-
-
+# a = dataset_generator(4, training_files)
+# for i in range(1000):
+# 	b = next(a)
+# 	print(i , " " , b[1])
