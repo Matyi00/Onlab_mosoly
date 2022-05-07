@@ -10,16 +10,23 @@ physical_devices = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 from tensorflow.keras import datasets, layers, models
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout, LSTM
+
 import matplotlib.pyplot as plt
 
 import mediapipe as mp
 import pandas as pd
 import os
 import pickle
+import gc
+
+
 ##
 def unit_vector(vector):
 	""" Returns the unit vector of the vector.  """
 	return vector / np.linalg.norm(vector)
+
 
 def angle_between(v1, v2):
 	""" Returns the angle in radians between vectors 'v1' and 'v2'::
@@ -35,12 +42,12 @@ def angle_between(v1, v2):
 	v2_u = unit_vector(v2)
 	return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
 
+
 ##
 
 dir_list = os.listdir(r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/Landmark Points (labeled videos)")
-files = [text.split(".")[0] for text in dir_list if (os.path.getsize(r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/Landmark Points (labeled videos)/" + text) != 0)]
-
-
+files = [text.split(".")[0] for text in dir_list if (os.path.getsize(
+	r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/Landmark Points (labeled videos)/" + text) != 0)]
 
 ##
 file = open(r'/home/polyamatyas/projects/mosoly/negative_positive_ratio.pkl', 'rb')
@@ -68,16 +75,17 @@ weight_for_1 = (1 / number_neg_pos[1]) * ((number_neg_pos[0] + number_neg_pos[1]
 
 class_weight = {0: weight_for_0, 1: weight_for_1}
 
+
 ##
 def dataset_generator(augment_number, file_list):
 	count = 0
 	for file in file_list:
 		# file = r"3f28a162-f529-4bc4-bbd6-f1ecf92d8b22"
 		# file = r"0005b896-33ad-4ecf-93b4-dad735ad69b6"
-		label_csv = pd.read_csv(r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/AU Labels/" + file + "-label.csv")
+		label_csv = pd.read_csv(
+			r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/AU Labels/" + file + "-label.csv")
 		len_label = label_csv.shape[0]
 		label_idx = 0
-
 
 		landmarks = pd.read_csv(
 			r"/home/polyamatyas/projects/mosoly/AMFEDPLUS_Distribution/Landmark Points (labeled videos)/" + file + ".csv")
@@ -120,13 +128,13 @@ def dataset_generator(augment_number, file_list):
 				rectangle = ((int(left_eye[0] - 75 * ratio), int(left_eye[1] - 70 * ratio)),
 							 ((int(left_eye[0] + 175 * ratio), int(left_eye[1] + 180 * ratio))))
 
-				if (len_label > label_idx + 1 and label_csv.iloc[label_idx + 1, 0] * 1000 < landmarks.iloc[frame_number, 0]):  # TimeStamp(msec) csak nem jeleníti meg valamiért
+				if (len_label > label_idx + 1 and label_csv.iloc[label_idx + 1, 0] * 1000 < landmarks.iloc[
+					frame_number, 0]):  # TimeStamp(msec) csak nem jeleníti meg valamiért
 					label_idx = label_idx + 1
 
 				aug_count = 0
 				while aug_count < augment_number:
-					#print(str(aug_count) + " " + str(augment_number))
-
+					# print(str(aug_count) + " " + str(augment_number))
 
 					height, width = image.shape[:2]
 					if (aug_count == 0):
@@ -136,12 +144,8 @@ def dataset_generator(augment_number, file_list):
 					T = np.float32([[1, delta_x, -delta_x * left_eye[1]], [0, 1, 0]])
 					img_translation = cv2.warpAffine(rotated_image, T, (width, height))
 
-
 					cropped_image = img_translation[rectangle[0][1]:rectangle[1][1], rectangle[0][0]:rectangle[1][0]]
 					downsampled_image = cv2.resize(cropped_image, (64, 64))
-
-
-
 
 					if (np.float64(label_csv.iloc[label_idx, 1]) == 0):
 						label = 0
@@ -155,27 +159,12 @@ def dataset_generator(augment_number, file_list):
 
 			except Exception as e:
 				pass
-				#print(f"{type(e).__name__} at line {e.__traceback__.tb_lineno} of {__file__}: {e}")
+			# print(f"{type(e).__name__} at line {e.__traceback__.tb_lineno} of {__file__}: {e}")
 
 			frame_number = frame_number + 1
 
 		count = count + 1
-##
-# class proxy:
-# 	def __init__(self, aug, list):
-# 		self.aug = aug
-# 		self.list = list
-# 		self.gen = dataset_generator(self.aug, self.list)
-#
-# 	def __call__(self):
-# 		return next(self.gen)
-#
-# 	def __iter__(self):
-# 		self.gen = dataset_generator(self.aug, self.list)
-# 		return self
-#
-# 	def __next__(self):
-# 		return next(self.gen)
+
 
 ##
 
@@ -339,11 +328,9 @@ def load_inputs_from_file():
 		training_images.extend(file_inputs[file][0])
 		training_labels.extend(file_inputs[file][1])
 
-
 	for file in test_files:
 		test_images.extend(file_inputs[file][0])
 		test_labels.extend(file_inputs[file][1])
-
 
 	for file in validation_files:
 		validation_images.extend(file_inputs[file][0])
@@ -351,79 +338,180 @@ def load_inputs_from_file():
 
 	file_inputs = 0
 
-
-
 	training_images, training_labels = np.array(training_images), np.array(training_labels)
 	validation_images, validation_labels = np.array(validation_images), np.array(validation_labels)
 	test_images, test_labels = np.array(test_images), np.array(test_labels)
 
 
+##
+# class RecurrentModel(tf.keras.Model):
+# 	def __init__(self, num_timesteps, *args, **kwargs):
+# 		self.num_timesteps = num_timesteps
+# 		super().__init__(*args, **kwargs)
+#
+# 	def build(self, input_shape):
+# 		inputs = layers.Input((None, None, input_shape[-1]))
+# 		x = layers.Conv2D(64, (3, 3), activation='relu')(inputs)
+# 		x = layers.MaxPooling2D((2, 2))(x)
+# 		x = layers.Flatten()(x)
+# 		x = layers.Dense(3, activation='linear')(x)
+# 		self.model = tf.keras.Model(inputs=[inputs], outputs=[x])
+#
+# 	def call(self, inputs, **kwargs):
+# 		x = inputs
+# 		for i in range(self.num_timesteps):
+# 			x = self.model(x)
+# 		return x
+#
+# ##
+# rnn = RecurrentModel(50)
+# rnn.build([64,64,3])
+# rnn.call(training_images)
+##
+
+# Function to compute Nth digit
+# from right in base B
+def nthDigit(a, n, b):
+	for i in range(1, n):
+		a = a // b
+	return a % b
+
 
 ##
-model = models.Sequential()
-model.add(layers.Conv2D(64, (7, 7), activation='relu', input_shape=(64, 64, 3)))
-model.add(layers.Dropout(0.3))
-model.add(layers.MaxPooling2D((2, 2)))
-model.add(layers.Conv2D(64, (5, 5), activation='relu'))
-model.add(layers.Dropout(0.3))
-model.add(layers.MaxPooling2D((2, 2)))
-model.add(layers.Conv2D(64, (3, 3), activation='relu'))
-model.add(layers.Dropout(0.3))
-model.add(layers.MaxPooling2D((2, 2)))
-model.add(layers.Flatten())
-model.add(layers.Dense(50))
+# for i in range(1,4):
+# 	for a in range(pow(3, i)):
+# 		for n in range(1, i + 1):
+# 			convolution_case = nthDigit(a, n, 3)
+# 			if (convolution_case == 0):
+# 				print("3x3 ", end="")
+# 			elif (convolution_case == 1):
+# 				print("5x5 ", end="")
+# 			elif (convolution_case == 2):
+# 				print("7x7 ", end="")
+# 		print("")
 
-model.summary()
+load_inputs_from_file()
+for i in range(2, 4):
+	for a in range(pow(3, i)):
+
+		model = models.Sequential()
+		model_id = ""
+		for n in range(1, i + 1):
+			convolution_case = nthDigit(a, n, 3)
+			conv_shape = 3 + convolution_case * 2  # 0:3x3 1:5x5 2:7x7
+			model_id += str(conv_shape)
+			if (n == 1):
+				# print(conv_shape, " input")
+				model.add(layers.Conv2D(32, (conv_shape, conv_shape), activation='relu', input_shape=(64, 64, 3)))
+			else:
+				# print(conv_shape)
+				model.add(layers.Conv2D(32, (conv_shape, conv_shape), activation='relu'))
+			model.add(layers.Dropout(0.2))
+			model.add(layers.MaxPooling2D((2, 2)))
+
+		model.add(layers.Flatten())
+		model.add(layers.Dense(30))
+		model.add(layers.Dense(2))
+
+		model.summary()
+
+		early_stopping_callback = tf.keras.callbacks.EarlyStopping(
+			monitor="val_loss",
+			min_delta=0,
+			patience=10,
+			verbose=0,
+			mode="auto",
+			baseline=None,
+			restore_best_weights=True
+		)
+
+		checkpoint_filepath = r'/home/polyamatyas/projects/mosoly/models/' + model_id + r'_{epoch:02d}.hdf5'
+		model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+			filepath=checkpoint_filepath,
+			save_weights_only=False,
+			monitor='val_accuracy',
+			save_best_only=False)
+
+		model.compile(optimizer='adam',
+					  loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+					  metrics=['accuracy'])
+
+		history = model.fit(training_images,
+							training_labels,
+							epochs=20,
+							validation_data=(validation_images, validation_labels),
+							callbacks=[early_stopping_callback, model_checkpoint_callback],
+							class_weight=class_weight)
+
+		file = open(r'/home/polyamatyas/projects/mosoly/models/' + model_id + 'history.pkl', 'wb')
+		pickle.dump(history.history, file)
+		file.close()
+
+
+		tf.keras.backend.clear_session()
+		del model
+		gc.collect()
+
+# model = models.Sequential()
+# model.add(layers.Conv2D(16, (3, 3), activation='relu', input_shape=(64, 64, 3)))
+# model.add(layers.Dropout(0.5))
+# model.add(layers.MaxPooling2D((2, 2)))
+# model.add(layers.Conv2D(16, (3, 3), activation='relu'))
+# model.add(layers.Dropout(0.5))
+# model.add(layers.MaxPooling2D((2, 2)))
+# model.add(layers.Conv2D(16, (3, 3), activation='relu'))
+# model.add(layers.Dropout(0.5))
+# model.add(layers.MaxPooling2D((2, 2)))
+# model.add(layers.Flatten())
+# model.add(layers.Dense(30))
+# model.add(layers.Dense(2))
+#
+#
+# model.summary()
 
 ##
-early_stopping_callback = tf.keras.callbacks.EarlyStopping(
-    monitor="val_loss",
-    min_delta=0,
-    patience=10,
-    verbose=0,
-    mode="auto",
-    baseline=None,
-    restore_best_weights=True
-)
+# early_stopping_callback = tf.keras.callbacks.EarlyStopping(
+# 	monitor="val_loss",
+# 	min_delta=0,
+# 	patience=10,
+# 	verbose=0,
+# 	mode="auto",
+# 	baseline=None,
+# 	restore_best_weights=True
+# )
+#
+# checkpoint_filepath = r'/home/polyamatyas/projects/mosoly/models/dump_{epoch:02d}.hdf5'
+# model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+# 	filepath=checkpoint_filepath,
+# 	save_weights_only=False,
+# 	monitor='val_accuracy',
+# 	save_best_only=False)
+#
+# model.compile(optimizer='adam',
+# 			  loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+# 			  metrics=['accuracy'])
 
-
-checkpoint_filepath = r'/home/polyamatyas/projects/mosoly/models/checkpoint_{epoch:02d}.hdf5'
-model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-    filepath=checkpoint_filepath,
-    save_weights_only=False,
-    monitor='val_accuracy',
-    save_best_only=False)
-
-
-
-model.compile(optimizer='adam',
-              loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-              metrics=['accuracy'])
-
-raw_train_generator = lambda: dataset_generator(4,training_files)
-raw_val_generator = lambda: dataset_generator(1,validation_files)
-
-tr_generator = tf.data.Dataset.from_generator(raw_train_generator, (tf.float64, tf.int32),    (tf.TensorShape([64,64,3]), tf.TensorShape([])))
-val_generator = tf.data.Dataset.from_generator(raw_val_generator,  (tf.float64, tf.int32),    (tf.TensorShape([64,64,3]), tf.TensorShape([])))
-
-history = model.fit_generator(tr_generator.batch(1), epochs=20,
-                    validation_data=val_generator.batch(1),
-					callbacks=[early_stopping_callback, model_checkpoint_callback],
-					use_multiprocessing=True,
-					class_weight=class_weight)
-
+# raw_train_generator = lambda: dataset_generator(4, training_files)
+# raw_val_generator = lambda: dataset_generator(1, validation_files)
+#
+# tr_generator = tf.data.Dataset.from_generator(raw_train_generator, (tf.float64, tf.int32),
+# 											  (tf.TensorShape([64, 64, 3]), tf.TensorShape([])))
+# val_generator = tf.data.Dataset.from_generator(raw_val_generator, (tf.float64, tf.int32),
+# 											   (tf.TensorShape([64, 64, 3]), tf.TensorShape([])))
+#
+# history = model.fit_generator(tr_generator.batch(32), epochs=20,
+# 							  validation_data=val_generator.batch(32),
+# 							  callbacks=[early_stopping_callback, model_checkpoint_callback],
+# 							  use_multiprocessing=True,
+# 							  class_weight=class_weight)
 
 # load_inputs_from_file()
 # history = model.fit(training_images,
 # 					training_labels,
 # 					epochs=20,
-#                     validation_data=(validation_images, validation_labels),
+# 					validation_data=(validation_images, validation_labels),
 # 					callbacks=[early_stopping_callback, model_checkpoint_callback],
 # 					class_weight=class_weight)
-
-
-
-
 
 ##
 
