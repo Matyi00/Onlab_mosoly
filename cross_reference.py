@@ -108,14 +108,21 @@ for label, pred in zip(genki_labels, amfed_to_genki_pred_class):
 
 # AMFED dataset on GENKI model
 
-loss, acc = genki_model.evaluate(amfed_images, amfed_labels, verbose=2)
+#loss, acc = genki_model.evaluate(amfed_images, amfed_labels, verbose=2)
 # 229854 ----- loss: 0.2407 - accuracy: 0.8166
 
-genki_to_amfed_pred = genki_model.predict(amfed_images)
-genki_to_amfed_pred_class = [0 if x[0] > x[1] else 1 for x in genki_to_amfed_pred]
+amfed_to_genki_pred_class = []
+
+count = 0
+for i in range(len(amfed_images) // 1000):
+
+	genki_to_amfed_pred = genki_model.predict(amfed_images[i * 1000: (i + 1) * 1000])
+	amfed_to_genki_pred_class.extend([0 if p[0] > p[1] else 1 for p in genki_to_amfed_pred])
+	print(str(count), '/', str(len(amfed_images) // 1000))
+	count +=1
 
 genki_to_amfed_correctness = [[0,0], [0,0]]
-for label, pred in zip(amfed_labels, genki_to_amfed_pred_class):
+for label, pred in zip(amfed_labels, amfed_to_genki_pred_class):
 	genki_to_amfed_correctness[label][pred] += 1
-# [, ]
-# [, ]
+# [163601, 2883]
+# [39272, 23244]

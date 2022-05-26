@@ -1,6 +1,7 @@
 # pkill -KILL -u polyamatyas
 # watch -n 0 nvidia-smi
 ##
+import sklearn
 import numpy as np
 import imutils
 import cv2
@@ -391,31 +392,83 @@ def nthDigit(a, n, b):
 # 		print("")
 
 load_inputs_from_file()
-for i in range(2, 4):
-	for a in range(pow(3, i)):
+##
+# for i in range(2, 4):
+# 	for a in range(pow(3, i)):
+#
+# 		model = models.Sequential()
+# 		model_id = ""
+# 		for n in range(1, i + 1):
+# 			convolution_case = nthDigit(a, n, 3)
+# 			conv_shape = 3 + convolution_case * 2  # 0:3x3 1:5x5 2:7x7
+# 			model_id += str(conv_shape)
+# 			if (n == 1):
+# 				# print(conv_shape, " input")
+# 				model.add(layers.Conv2D(32, (conv_shape, conv_shape), activation='relu', input_shape=(64, 64, 3)))
+# 			else:
+# 				# print(conv_shape)
+# 				model.add(layers.Conv2D(32, (conv_shape, conv_shape), activation='relu'))
+# 			model.add(layers.Dropout(0.2))
+# 			model.add(layers.MaxPooling2D((2, 2)))
+#
+# 		model.add(layers.Flatten())
+# 		model.add(layers.Dense(30))
+# 		model.add(layers.Dense(2))
+#
+# 		model.summary()
+#
+# 		early_stopping_callback = tf.keras.callbacks.EarlyStopping(
+# 			monitor="val_loss",
+# 			min_delta=0,
+# 			patience=10,
+# 			verbose=0,
+# 			mode="auto",
+# 			baseline=None,
+# 			restore_best_weights=True
+# 		)
+#
+# 		checkpoint_filepath = r'/home/polyamatyas/projects/mosoly/models/' + model_id + r'_{epoch:02d}.hdf5'
+# 		model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+# 			filepath=checkpoint_filepath,
+# 			save_weights_only=False,
+# 			monitor='val_accuracy',
+# 			save_best_only=False)
+#
+# 		model.compile(optimizer='adam',
+# 					  loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+# 					  metrics=['accuracy'])
+#
+# 		history = model.fit(training_images,
+# 							training_labels,
+# 							epochs=20,
+# 							validation_data=(validation_images, validation_labels),
+# 							callbacks=[early_stopping_callback, model_checkpoint_callback],
+# 							class_weight=class_weight)
+#
+# 		file = open(r'/home/polyamatyas/projects/mosoly/models/' + model_id + 'history.pkl', 'wb')
+# 		pickle.dump(history.history, file)
+# 		file.close()
+#
+#
+# 		tf.keras.backend.clear_session()
+# 		del model
+# 		gc.collect()
 
-		model = models.Sequential()
-		model_id = ""
-		for n in range(1, i + 1):
-			convolution_case = nthDigit(a, n, 3)
-			conv_shape = 3 + convolution_case * 2  # 0:3x3 1:5x5 2:7x7
-			model_id += str(conv_shape)
-			if (n == 1):
-				# print(conv_shape, " input")
-				model.add(layers.Conv2D(32, (conv_shape, conv_shape), activation='relu', input_shape=(64, 64, 3)))
-			else:
-				# print(conv_shape)
-				model.add(layers.Conv2D(32, (conv_shape, conv_shape), activation='relu'))
-			model.add(layers.Dropout(0.2))
-			model.add(layers.MaxPooling2D((2, 2)))
+model = models.Sequential()
+model.add(layers.Conv2D(32, (7, 7), activation='relu', input_shape=(64, 64, 3)))
+model.add(layers.Dropout(0.2))
+model.add(layers.MaxPooling2D((2, 2)))
+model.add(layers.Conv2D(32, (5, 5), activation='relu'))
+model.add(layers.Dropout(0.2))
+model.add(layers.MaxPooling2D((2, 2)))
+model.add(layers.Conv2D(32, (3, 3), activation='relu'))
+model.add(layers.Dropout(0.2))
+model.add(layers.MaxPooling2D((2, 2)))
+model.add(layers.Flatten())
+model.add(layers.Dense(30))
+model.add(layers.Dense(2))
 
-		model.add(layers.Flatten())
-		model.add(layers.Dense(30))
-		model.add(layers.Dense(2))
-
-		model.summary()
-
-		early_stopping_callback = tf.keras.callbacks.EarlyStopping(
+early_stopping_callback = tf.keras.callbacks.EarlyStopping(
 			monitor="val_loss",
 			min_delta=0,
 			patience=10,
@@ -425,49 +478,19 @@ for i in range(2, 4):
 			restore_best_weights=True
 		)
 
-		checkpoint_filepath = r'/home/polyamatyas/projects/mosoly/models/' + model_id + r'_{epoch:02d}.hdf5'
-		model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-			filepath=checkpoint_filepath,
-			save_weights_only=False,
-			monitor='val_accuracy',
-			save_best_only=False)
-
-		model.compile(optimizer='adam',
+model.compile(optimizer='adam',
 					  loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
 					  metrics=['accuracy'])
 
-		history = model.fit(training_images,
-							training_labels,
-							epochs=20,
-							validation_data=(validation_images, validation_labels),
-							callbacks=[early_stopping_callback, model_checkpoint_callback],
-							class_weight=class_weight)
-
-		file = open(r'/home/polyamatyas/projects/mosoly/models/' + model_id + 'history.pkl', 'wb')
-		pickle.dump(history.history, file)
-		file.close()
+history = model.fit(training_images,
+					training_labels,
+					epochs=20,
+					validation_data=(validation_images, validation_labels),
+					callbacks=[early_stopping_callback],
+					class_weight=class_weight)
 
 
-		tf.keras.backend.clear_session()
-		del model
-		gc.collect()
 
-# model = models.Sequential()
-# model.add(layers.Conv2D(16, (3, 3), activation='relu', input_shape=(64, 64, 3)))
-# model.add(layers.Dropout(0.5))
-# model.add(layers.MaxPooling2D((2, 2)))
-# model.add(layers.Conv2D(16, (3, 3), activation='relu'))
-# model.add(layers.Dropout(0.5))
-# model.add(layers.MaxPooling2D((2, 2)))
-# model.add(layers.Conv2D(16, (3, 3), activation='relu'))
-# model.add(layers.Dropout(0.5))
-# model.add(layers.MaxPooling2D((2, 2)))
-# model.add(layers.Flatten())
-# model.add(layers.Dense(30))
-# model.add(layers.Dense(2))
-#
-#
-# model.summary()
 
 ##
 # early_stopping_callback = tf.keras.callbacks.EarlyStopping(
@@ -532,3 +555,50 @@ for i in range(2, 4):
 # for i in range(1000):
 # 	b = next(a)
 # 	print(i , " " , b[1])
+
+
+
+#GENKI on GENKI
+loss, acc = model.evaluate(test_images, test_labels, verbose=2)
+# 4000 -----  loss: 0.2665 - accuracy: 0.8440
+
+
+amfed_to_amfed_pred = model.predict(test_images)
+amfed_to_amfed_pred_class = [0 if x[0] > x[1] else 1 for x in amfed_to_amfed_pred]
+
+amfed_to_amfed_correctness = [[0,0], [0,0]]
+for label, pred in zip(test_labels, amfed_to_amfed_pred_class):
+	amfed_to_amfed_correctness[label][pred] += 1
+# [17233, 1429]
+# [2594, 3904]
+
+##
+missclassification_pictures = [[], []]
+for i in range(10000):
+	if (test_labels[i] != amfed_to_amfed_pred_class[i]):
+		missclassification_pictures[test_labels[i]].append(test_images[i])
+
+##
+from sklearn import metrics
+#model.save(r'/home/polyamatyas/projects/mosoly/753_model_amfed')
+#model = tf.keras.models.load_model(r'/home/polyamatyas/projects/mosoly/753_model_amfed')
+
+#roc
+def softmax(vec):
+	exponential = np.exp(vec)
+	probabilities = exponential / np.sum(exponential)
+	return probabilities
+
+probabilities = []
+
+for x in amfed_to_amfed_pred:
+	probabilities.append(softmax(x))
+
+y_pred_proba = np.array(probabilities)[:,1]
+fpr, tpr, _ = sklearn.metrics.roc_curve(test_labels,  y_pred_proba)
+
+#create ROC curve
+plt.plot(fpr,tpr)
+plt.ylabel('True Positive Rate')
+plt.xlabel('False Positive Rate')
+plt.show()

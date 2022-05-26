@@ -1,16 +1,13 @@
 ##
-
+import sklearn
 from imutils import face_utils
 import numpy as np
-import argparse
 import imutils
 import cv2
-import sys
 import tensorflow as tf
 from tensorflow.keras import datasets, layers, models
-import matplotlib.pyplot as plt
-import dlib
 import mediapipe as mp
+from sklearn import metrics
 import gc
 physical_devices = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(physical_devices[0], True)
@@ -50,7 +47,7 @@ def angle_between(v1, v2):
 seq = iaa.Sequential([
 	iaa.Fliplr(0.5),  # horizontally flip 50% of the images
 	iaa.Affine(shear={"x": (-30, 30)}),
-	iaa.GaussianBlur(sigma=(0, 1.0))  # blur images with a sigma of 0 to
+		iaa.GaussianBlur(sigma=(0, 1.0))  # blur images with a sigma of 0 to 1
 ])
 
 ##
@@ -89,13 +86,13 @@ def read_from_files():
 # |######################################
 # Augment images
 # |#####################################
-def augment(raw_images, raw_labels):
+def augment(raw_images, raw_labels, augment_number):
 	test_images = []
 	test_labels = []
 
 	count = 0
 	for original_image, label in zip(raw_images, raw_labels):
-		batch = [original_image for i in range(5)]
+		batch = [original_image for i in range(augment_number)]
 		augmented_images_batch = seq(images=batch)
 		for x in augmented_images_batch:
 			test_images.append(x)
@@ -154,8 +151,15 @@ def make_into_inputs(test_images, test_labels):
 								 387] + landmarks[388] + landmarks[466] + landmarks[263] + landmarks[249] + landmarks[
 								 390] + landmarks[
 								 373] + landmarks[374] + landmarks[380] + landmarks[381] + landmarks[382]) // 16
-			# cv2.circle(image, (int(left_eye[0]), int(left_eye[1])), 2, (255, 255, 0), -1)
-			# cv2.circle(image, (int(right_eye[0]), int(right_eye[1])), 2, (255, 255, 0), -1)
+
+				# for x in landmarks:
+				# 	cv2.circle(image, (int(x[0]), int(x[1])), 2, (0, 255, 255), -1)
+				#
+				# for i in [33, 246, 161, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7, 362, 398, 384, 385, 386, 387, 388, 466, 263, 249, 390, 373, 374, 380, 381, 382]:
+				# 	cv2.circle(image, (int(landmarks[i][0]), int(landmarks[i][1])), 2, (254, 0, 0), -1)
+				#
+				# cv2.circle(image, (int(left_eye[0]), int(left_eye[1])), 2, (255, 255, 0), -1)
+				# cv2.circle(image, (int(right_eye[0]), int(right_eye[1])), 2, (255, 255, 0), -1)
 			# cv2_imshow(image)
 			else:
 				gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -236,13 +240,13 @@ def make_into_inputs(test_images, test_labels):
 
 ##
 # raw_images, raw_labels = read_from_files()
-# augmented_images, augmented_labels = augment(raw_images, raw_labels)
+# augmented_images, augmented_labels = augment(raw_images, raw_labels, 20)
 #
 # original_input_images, original_input_labels = make_into_inputs(raw_images, raw_labels)
 # augmented_input_images, augmented_input_labels = make_into_inputs(augmented_images, augmented_labels)
 # import pickle
 #
-# file = open('GENKI_inputs.pkl', 'wb')
+# file = open('GENKI_inputs_20_augment.pkl', 'wb')
 # pickle.dump(original_input_images, file)
 # pickle.dump(original_input_labels, file)
 # pickle.dump(augmented_input_images, file)
@@ -251,7 +255,7 @@ def make_into_inputs(test_images, test_labels):
 
 
 ##
-file = open('GENKI_inputs.pkl', 'rb')
+file = open('GENKI_inputs_20_augment.pkl', 'rb')
 original_input_images = pickle.load(file)
 original_input_labels = pickle.load(file)
 augmented_input_images = pickle.load(file)
@@ -261,121 +265,226 @@ file.close()
 
 ##
 
-# Function to compute Nth digit
-# from right in base B
-def nthDigit(a, n, b):
-	for i in range(1, n):
-		a = a // b
-	return a % b
+# # Function to compute Nth digit
+# # from right in base B
+# def nthDigit(a, n, b):
+# 	for i in range(1, n):
+# 		a = a // b
+# 	return a % b
 
 
 ##
-training_rate, validation_rate, test_rate = 0.8, 0.1, 0.1
-permutation = np.random.permutation(len(original_input_images))
+def generate_inputs(original_input_images, original_input_labels, augmented_input_images, augmented_input_labels, augment_rate):
+	training_rate, validation_rate, test_rate = 0.8, 0.1, 0.1
+	permutation = np.random.permutation(len(original_input_images))
 
-augment_rate = len(augmented_input_images) // len(original_input_images)
+	full_augment_rate = len(augmented_input_images) // len(original_input_images)
 
-training_images, training_labels = [], []
-validation_images, validation_labels = [], []
-test_images, test_labels = [], []
+	training_images, training_labels = [], []
+	validation_images, validation_labels = [], []
+	test_images, test_labels = [], []
 
-for i in range(0, len(original_input_images)):
-	number = permutation[i]
+	for i in range(0, len(original_input_images)):
+		number = permutation[i]
 
-	if (i < len(original_input_images) * training_rate):
-		training_images.append(original_input_images[number])
-		training_labels.append(original_input_labels[number])
+		if (i < len(original_input_images) * training_rate):
+			training_images.append(original_input_images[number])
+			training_labels.append(original_input_labels[number])
 
-		training_images.extend(augmented_input_images[number * augment_rate: number * augment_rate + augment_rate])
-		training_labels.extend(augmented_input_labels[number * augment_rate: number * augment_rate + augment_rate])
+			training_images.extend(augmented_input_images[number * full_augment_rate: number * full_augment_rate + augment_rate])
+			training_labels.extend(augmented_input_labels[number * full_augment_rate: number * full_augment_rate + augment_rate])
 
-	elif (i < len(original_input_images) * (training_rate + validation_rate)):
-		validation_images.append(original_input_images[number])
-		validation_labels.append(original_input_labels[number])
-	else:
-		test_images.append(original_input_images[number])
-		test_labels.append(original_input_labels[number])
+		elif (i < len(original_input_images) * (training_rate + validation_rate)):
+			validation_images.append(original_input_images[number])
+			validation_labels.append(original_input_labels[number])
+		else:
+			test_images.append(original_input_images[number])
+			test_labels.append(original_input_labels[number])
 
-training_images, training_labels = np.array(training_images), np.array(training_labels)
-validation_images, validation_labels = np.array(validation_images), np.array(validation_labels)
-test_images, test_labels = np.array(test_images), np.array(test_labels)
-##
-for i in range(1, 4):
-	for a in range(pow(3, i)):
+	training_images, training_labels = np.array(training_images), np.array(training_labels)
+	validation_images, validation_labels = np.array(validation_images), np.array(validation_labels)
+	test_images, test_labels = np.array(test_images), np.array(test_labels)
 
-		model = models.Sequential()
-		model_id = ""
-		for n in range(1, i + 1):
-			convolution_case = nthDigit(a, n, 3)
-			conv_shape = 3 + convolution_case * 2  # 0:3x3 1:5x5 2:7x7
-			model_id += str(conv_shape)
-			if (n == 1):
-				# print(conv_shape, " input")
-				model.add(layers.Conv2D(32, (conv_shape, conv_shape), activation='relu', input_shape=(64, 64, 3)))
-			else:
-				# print(conv_shape)
-				model.add(layers.Conv2D(32, (conv_shape, conv_shape), activation='relu'))
-			model.add(layers.Dropout(0.2))
-			model.add(layers.MaxPooling2D((2, 2)))
-
-		model.add(layers.Flatten())
-		model.add(layers.Dense(30))
-		model.add(layers.Dense(2))
-
-		model.summary()
-
-		early_stopping_callback = tf.keras.callbacks.EarlyStopping(
-			monitor="val_loss",
-			min_delta=0,
-			patience=15,
-			verbose=0,
-			mode="auto",
-			baseline=None,
-			restore_best_weights=True
-		)
-
-		checkpoint_filepath = r'/home/polyamatyas/projects/mosoly/models_genki/' + model_id + r'_{epoch:02d}.hdf5'
-		model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-			filepath=checkpoint_filepath,
-			save_weights_only=False,
-			monitor='val_accuracy',
-			save_best_only=False)
-
-		model.compile(optimizer='adam',
-					  loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-					  metrics=['accuracy'])
-
-		history = model.fit(training_images,
-							training_labels,
-							epochs=30,
-							validation_data=(validation_images, validation_labels),
-							callbacks=[early_stopping_callback, model_checkpoint_callback])
-
-		file = open(r'/home/polyamatyas/projects/mosoly/models_genki/' + model_id + 'history.pkl', 'wb')
-		pickle.dump(history.history, file)
-		file.close()
-
-		tf.keras.backend.clear_session()
-		del model
-		gc.collect()
-
-
+	return training_images, training_labels, validation_images, validation_labels, test_images, test_labels
 
 
 ##
-model_name = "555"
-# file = open(r'/home/polyamatyas/projects/mosoly/models/' + model_name + 'history.pkl', 'rb')
-file = open(r'/home/polyamatyas/projects/mosoly/models_genki/3history.pkl', 'rb')
-history = pickle.load(file)
-file.close()
+# for i in range(1, 4):
+# 	for a in range(pow(3, i)):
+# 		for number_of_teaching in range(10):
+#
+# 			training_images, training_labels, validation_images, validation_labels, test_images, test_labels = generate_inputs(original_input_images, original_input_labels, augmented_input_images, augmented_input_labels, 5)
+#
+# 			model = models.Sequential()
+# 			model_id = ""
+# 			for n in range(1, i + 1):
+# 				convolution_case = nthDigit(a, n, 3)
+# 				conv_shape = 3 + convolution_case * 2  # 0:3x3 1:5x5 2:7x7
+# 				model_id += str(conv_shape)
+# 				if (n == 1):
+# 					# print(conv_shape, " input")
+# 					model.add(layers.Conv2D(32, (conv_shape, conv_shape), activation='relu', input_shape=(64, 64, 3)))
+# 				else:
+# 					# print(conv_shape)
+# 					model.add(layers.Conv2D(32, (conv_shape, conv_shape), activation='relu'))
+# 				model.add(layers.Dropout(0.2))
+# 				model.add(layers.MaxPooling2D((2, 2)))
+#
+# 			model.add(layers.Flatten())
+# 			model.add(layers.Dense(30))
+# 			model.add(layers.Dense(2))
+#
+# 			print(model_id, number_of_teaching)
+# 			#model.summary()
+#
+# 			early_stopping_callback = tf.keras.callbacks.EarlyStopping(
+# 				monitor="val_loss",
+# 				min_delta=0,
+# 				patience=15,
+# 				verbose=0,
+# 				mode="auto",
+# 				baseline=None,
+# 				restore_best_weights=True
+# 			)
+#
+# 			checkpoint_filepath = r'/home/polyamatyas/projects/mosoly/models_genki_10/' + model_id + r'_' + str(number_of_teaching) + r'_{epoch}.hdf5'
+# 			model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+# 				filepath=checkpoint_filepath,
+# 				save_weights_only=False,
+# 				monitor='val_accuracy',
+# 				save_best_only=False)
+#
+# 			model.compile(optimizer='adam',
+# 						  loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+# 						  metrics=['accuracy'])
+#
+# 			history = model.fit(training_images,
+# 								training_labels,
+# 								epochs=30,
+# 								validation_data=(validation_images, validation_labels),
+# 								callbacks=[early_stopping_callback])#, model_checkpoint_callback])
+#
+# 			file = open(r'/home/polyamatyas/projects/mosoly/models_genki_10/' + model_id + '_' + str(number_of_teaching) + r'_history.pkl', 'wb')
+# 			pickle.dump(history.history, file)
+# 			file.close()
+#
+# 			tf.keras.backend.clear_session()
+# 			del model
+# 			gc.collect()
+#
+#
+#
 
-plt.plot(history['accuracy'], label='accuracy')
-plt.plot(history['val_accuracy'], label = 'val_accuracy')
-plt.xlabel('Epoch')
-plt.ylabel('Accuracy')
-plt.ylim([0.5, 1])
-plt.legend(loc='lower right')
-plt.figtext(.15, .15, model_name)
+##
+# for i in range(11):
+# 	for j in range(10):
+training_images, training_labels, validation_images, validation_labels, test_images, test_labels = generate_inputs(
+	original_input_images, original_input_labels, augmented_input_images, augmented_input_labels, 5)
+
+model = models.Sequential()
+model.add(layers.Conv2D(32, (5, 5), activation='relu', input_shape=(64, 64, 3)))
+model.add(layers.Dropout(0.2))
+model.add(layers.MaxPooling2D((2, 2)))
+model.add(layers.Conv2D(32, (3, 3), activation='relu'))
+model.add(layers.Dropout(0.2))
+model.add(layers.MaxPooling2D((2, 2)))
+model.add(layers.Conv2D(32, (5, 5), activation='relu'))
+model.add(layers.Dropout(0.2))
+model.add(layers.MaxPooling2D((2, 2)))
+model.add(layers.Flatten())
+model.add(layers.Dense(30))
+model.add(layers.Dense(2))
+
+early_stopping_callback = tf.keras.callbacks.EarlyStopping(
+	monitor="val_loss",
+	min_delta=0,
+	patience=15,
+	verbose=0,
+	mode="auto",
+	baseline=None,
+	restore_best_weights=True	)
+
+#checkpoint_filepath = r'/home/polyamatyas/projects/mosoly/genki_models_augment/' + str(i) + r'_' + str(j) + r'_{epoch}.hdf5'
+# model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+# 	filepath=checkpoint_filepath,
+# 	save_weights_only=False,
+# 	monitor='val_accuracy',
+# 	save_best_only=False)
+
+model.compile(optimizer='adam',
+			  loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+			  metrics=['accuracy'])
+
+history = model.fit(training_images,
+					training_labels,
+					epochs=30,
+					validation_data=(validation_images, validation_labels),
+					callbacks=[early_stopping_callback])#, model_checkpoint_callback])
+
+# file = open(r'/home/polyamatyas/projects/mosoly/genki_models_augment_535/' + str(i) + '_' + str(j) + r'_history.pkl', 'wb')
+# pickle.dump(history.history, file)
+# file.close()
+# print("augment: ",str(i), "n: ", str(j))
+# tf.keras.backend.clear_session()
+# del model
+# gc.collect()
+#
+
+##
+# model_name = "555"
+# # file = open(r'/home/polyamatyas/projects/mosoly/models/' + model_name + 'history.pkl', 'rb')
+# file = open(r'/home/polyamatyas/projects/mosoly/models_genki/3history.pkl', 'rb')
+# history = pickle.load(file)
+# file.close()
+#
+# plt.plot(history['accuracy'], label='accuracy')
+# plt.plot(history['val_accuracy'], label = 'val_accuracy')
+# plt.xlabel('Epoch')
+# plt.ylabel('Accuracy')
+# plt.ylim([0.5, 1])
+# plt.legend(loc='lower right')
+# plt.figtext(.15, .15, model_name)
+# plt.show()
+##
+
+#GENKI on GENKI
+loss, acc = model.evaluate(test_images, test_labels, verbose=2)
+# 4000 -----  loss: 0.2665 - accuracy: 0.8440
+
+
+genki_to_genki_pred = model.predict(test_images)
+genki_to_genki_pred_class = [0 if x[0] > x[1] else 1 for x in genki_to_genki_pred]
+
+genki_to_genki_correctness = [[0,0], [0,0]]
+for label, pred in zip(test_labels, genki_to_genki_pred_class):
+	genki_to_genki_correctness[label][pred] += 1
+# [176, 11]
+# [10, 203]
+
+##
+
+missclassification_pictures = [[], []]
+for i in range(len(test_images)):
+	if (test_labels[i] != genki_to_genki_pred_class[i]):
+		missclassification_pictures[test_labels[i]].append(test_images[i])
+
+##
+#roc
+def softmax(vec):
+	exponential = np.exp(vec)
+	probabilities = exponential / np.sum(exponential)
+	return probabilities
+
+probabilities = []
+
+for x in genki_to_genki_pred:
+	probabilities.append(softmax(x))
+
+y_pred_proba = np.array(probabilities)[:,1]
+fpr, tpr, _ = sklearn.metrics.roc_curve(test_labels,  y_pred_proba)
+
+#create ROC curve
+plt.plot(fpr,tpr)
+plt.ylabel('True Positive Rate')
+plt.xlabel('False Positive Rate')
 plt.show()
-##
-
